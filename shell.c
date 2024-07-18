@@ -4,6 +4,8 @@
 #include <string.h>
 #include <errno.h>
 
+char **read_user_input();
+
 int main(int argc, const char *argv[])
 {
     printf("Welcome to my shell!\n");
@@ -12,20 +14,12 @@ int main(int argc, const char *argv[])
     {
         printf("# ");
 
-        // Read & Process user input
-        char *line = NULL;
-        size_t size;
-        size_t line_len = getline(&line, &size, stdin);
-        if (line_len <= 0)
+        char **args = read_user_input();
+
+        if (args == NULL)
         {
             continue;
         }
-        *(line + line_len - 1) = '\0'; // Remove line break char
-
-        // Remaining args for excvp
-        char *args[2];
-        args[0] = line;
-        args[1] = NULL;
 
         // Run command in a seperate process
         int ret_val = fork();
@@ -51,8 +45,71 @@ int main(int argc, const char *argv[])
             {
                 fprintf(stderr, "Wait Failed.\n");
             }
-            free(line); // Free up heap space for getline
+
+            // Free the allocated memory for arguments
+            for (int i = 0; args[i] != NULL; ++i)
+            {
+                free(args[i]);
+            }
+            free(args);
         }
     }
     return 0;
+}
+
+/**
+ * @brief Read user input.
+ *
+ * @return char**
+ */
+char **read_user_input()
+{
+    char *line = NULL;
+    size_t size;
+    size_t line_len = getline(&line, &size, stdin);
+    if (line_len <= 0)
+    {
+        free(line);
+        return NULL;
+    }
+    *(line + line_len - 1) = '\0'; // Remove break
+
+    // Split input string into tokens based on \s
+    char *token = strtok(line, "\t\n\r\f\v");
+    int arg_count = 0;
+    while (token != NULL)
+    {
+        arg_count++;
+        token = strtok(NULL, "\t\n\r\f\v");
+    }
+
+    // Allocate mem for arg array
+    char **args = malloc((arg_count + 1) * sizeof(char *));
+    if (args == NULL)
+    {
+        free(line);
+        return NULL;
+    }
+
+    token = strtok(line, "\t\n\r\f\v");
+    int i = 0;
+    while (token != NULL)
+    {
+        args[i] = strdup(token);
+        if (args[i] == NULL)
+        {
+            for (int j = 0; j < i; ++j)
+            {
+                free(args[j]);
+            }
+            free(args);
+            free(line);
+            return NULL;
+        }
+        i++;
+        token = strtok(NULL, "\t\n\r\f\v");
+    }
+    args[i] = NULL;
+    free(line);
+    return args;
 }
